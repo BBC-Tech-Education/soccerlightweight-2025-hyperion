@@ -1,0 +1,56 @@
+name: Build firmware
+
+# Compiles every PlatformIO project in Software/ whenever code is pushed,
+# so a ✅ or ❌ appears next to each commit on GitHub.
+
+on:
+  push:
+    paths:
+      - "Software/**"
+      - ".github/workflows/build.yml"
+  pull_request:
+    paths:
+      - "Software/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-${{ runner.os }}-${{ hashFiles('Software/**/platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build every PlatformIO project
+        run: |
+          status=0
+          found=0
+          while IFS= read -r ini; do
+            dir=$(dirname "$ini")
+            found=1
+            echo "::group::Building $dir"
+            if pio run -d "$dir"; then
+              echo "✅ $dir"
+            else
+              echo "::error::Build failed in $dir"
+              status=1
+            fi
+            echo "::endgroup::"
+          done < <(find Software -name platformio.ini -not -path "*/.pio/*" | sort)
+          if [ "$found" = 0 ]; then echo "No PlatformIO projects found in Software/"; fi
+          exit $status
